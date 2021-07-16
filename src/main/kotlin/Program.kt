@@ -9,9 +9,15 @@ import kotlin.io.path.absolutePathString
 fun main(args: Array<String>) {
     val crop = Rect(120, 63, 450, 795)
 
+    val sourcePdf = Path.of(args[0])
+    val destPdf = Path.of(args[1])
+
+    println("Source: $sourcePdf")
+    println("Destination: $destPdf")
+
     val transformer = PdfTransformer(
-        Path.of(args[0]),
-        Path.of(args[1]),
+        sourcePdf,
+        destPdf,
         946,
         crop,
         setOf(0, 1, 5)
