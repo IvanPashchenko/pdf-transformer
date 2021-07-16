@@ -1,3 +1,5 @@
+import kotlinx.cli.ArgParser
+import kotlinx.cli.ArgType
 import java.nio.file.Files
 import java.nio.file.Path
 import java.text.NumberFormat
@@ -5,22 +7,29 @@ import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicInteger
 import kotlin.io.path.absolutePathString
 
+var TRACE_ENABLED = false
+
 @Suppress("UNUSED_PARAMETER")
 fun main(args: Array<String>) {
+    val parser = ArgParser("pdf-transformer")
     val crop = Rect(120, 63, 450, 795)
 
-    val sourcePdf = Path.of(args[0])
-    val destPdf = Path.of(args[1])
+    val input by parser.argument(ArgType.String)
+    val output by parser.argument(ArgType.String)
+    val trace by parser.option(ArgType.Boolean)
 
-    println("Source: $sourcePdf")
-    println("Destination: $destPdf")
+    parser.parse(args)
+
+    println("Source: $input")
+    println("Destination: $output")
+    TRACE_ENABLED = trace ?: false
 
     val transformer = PdfTransformer(
-        sourcePdf,
-        destPdf,
+        Path.of(input),
+        Path.of(output),
         946,
         crop,
-        setOf(0, 1, 5)
+        setOf(0, 1, 5),
     )
 
     transformer.makeSplitPages()
@@ -109,7 +118,8 @@ class PdfTransformer(
     }
 
     private fun runProcess(command: List<String>, timeoutSec: Int) {
-//        println(command.joinToString(" "))
+        if (TRACE_ENABLED)
+            println(command.joinToString(" "))
 
         val pb = ProcessBuilder(command)
             .directory(workDir.toFile())
