@@ -5,39 +5,28 @@ import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicInteger
 import kotlin.io.path.absolutePathString
 
+@Suppress("UNUSED_PARAMETER")
 fun main(args: Array<String>) {
-    val args = listOf(
-        "/home/haze/Downloads/convert/orig.pdf",
-        "/home/haze/Downloads/convert/merged.pdf",
-        "945",
-        "300",
-        "-crop +500+685 -crop -600-685 +repage",
-        "0,1,5"
-    )
+    val crop = Rect(120, 63, 450, 795)
 
     val transformer = PdfTransformer(
-        Path.of("/home/haze/Downloads/convert/orig.pdf"),
-        Path.of("/home/haze/Downloads/convert/merged.pdf"),
-        945,
-        Dimensions("594.75", "795"),
-        Rect(1000, 0, 0, 0),
+        Path.of("C:/Users/root/Downloads/orig.pdf"),
+        Path.of("C:/Users/root/Downloads/merged.pdf"),
+        946,
+        crop,
         setOf(0, 1, 5)
     )
 
-    transformer.extractPage(45, Path.of("/home/haze/github/pdf-transformer/45.pdf"), Rect(1000, 1000, 1000, 1000))
-
-//    transformer.makeSplitPages()
-//    transformer.mergePages()
+    transformer.makeSplitPages()
+    transformer.mergePages()
 }
 
 class Rect(val left: Int, val top: Int, val right: Int, val bottom: Int)
-class Dimensions(val width: String, val height: String)
 
 class PdfTransformer(
     private val sourcePdf: Path,
     private val destPdf: Path,
     private val lastPage: Int,
-    private val dimensions: Dimensions,
     private val crop: Rect,
     private val noTransformPages: Set<Int>
 ) {
@@ -49,46 +38,62 @@ class PdfTransformer(
 
     fun makeSplitPages() {
         val progress = AtomicInteger(0)
-        val workload = (0..lastPage).toList()
+        val workload = (1..lastPage).toList()
         workload.parallelStream().forEach { page ->
-            val pagePdf = workDir.resolve("$page.pdf.orig")
-
-            val cropbox = if (noTransformPages.contains(page)) null else crop
-            extractPage(page, pagePdf, cropbox)
-
-            val pagesDone = progress.incrementAndGet()
-            val pageCount = lastPage + 1
-
-            val ratioDone = pagesDone.toDouble() / pageCount
-
-            println("$pagesDone/$pageCount (${NumberFormat.getPercentInstance().format(ratioDone)})")
+            for (i in 1..GS_RETRY_COUNT) {
+                try {
+                    extractPageWithProgress(page, progress)
+                    break
+                } catch (e: Throwable) {
+                    if (i < GS_RETRY_COUNT)
+                        println("Failed to process page $page, retrying")
+                    else {
+                        println("Failed to process page in $GS_RETRY_COUNT attempts")
+                        throw e
+                    }
+                }
+            }
         }
+    }
+
+    private fun extractPageWithProgress(page: Int, progress: AtomicInteger) {
+        val pagePdf = workDir.resolve("$page.pdf.orig")
+
+        val cropbox = if (noTransformPages.contains(page)) null else crop
+        extractPage(page, pagePdf, cropbox)
+
+        val pagesDone = progress.incrementAndGet()
+
+        val ratioDone = pagesDone.toDouble() / lastPage
+        println("$pagesDone/$lastPage (${NumberFormat.getPercentInstance().format(ratioDone)}) (p. $page)")
     }
 
     fun mergePages() {
         println("Merging...")
-        val pages = (0..lastPage).toList().joinToString(" ") { "$it.pdf" }
-        runProcess("gs -dBATCH -dNOPAUSE -q -sDEVICE=pdfwrite -sOutputFile=$destPdf $pages", 600)
+        val pages = (1..lastPage).toList().joinToString(" ") { "$it.pdf" }
+        runProcess("$gs -dBATCH -dNOPAUSE -q -sDEVICE=pdfwrite -sOutputFile=$destPdf $pages", 600)
     }
 
-    private fun extractPageOld(page: Int, transform: String, pagePdf: Path) = runProcess("convert $transform -density $dimensions $sourcePdf[$page] $pagePdf", 60)
-
-    fun extractPage(page: Int, pagePdf: Path, crop: Rect?) {
+    private fun extractPage(page: Int, pagePdf: Path, crop: Rect?) {
         if (crop == null) {
-            val extractCommand = "gs -sDEVICE=pdfwrite -dNOPAUSE -dBATCH -dSAFER -dFirstPage=$page -dLastPage=$page -sOutputFile=$pagePdf $sourcePdf"
+            val extractCommand = "$gs -q -sDEVICE=pdfwrite -dNOPAUSE -dBATCH -dSAFER -dFirstPage=$page -dLastPage=$page -o $pagePdf -f $sourcePdf"
             runProcess(extractCommand, 60 )
             return
         }
 
+        val cropWidth = crop.right - crop.left
+        val cropHeight = crop.bottom - crop.top
+
         runProcess(listOf(
-            "gs",
-            "-o", pagePdf.absolutePathString(),
+            gs,
+            "-q",
+            "-o", pagePdf.toString(),
             "-sDEVICE=pdfwrite",
             "-dNOPAUSE", "-dBATCH", "-dSAFER",
             "-dFirstPage=$page", "-dLastPage=$page",
-            "-dDEVICEWIDTHPOINTS=200", "-dDEVICEHEIGHTPOINTS=250", "-dFIXEDMEDIA",
-            "-c", "<</PageOffset [-21 -32]>> setpagedevice",
-            "-f", sourcePdf.absolutePathString(),
+            "-dDEVICEWIDTHPOINTS=$cropWidth", "-dDEVICEHEIGHTPOINTS=$cropHeight", "-dFIXEDMEDIA",
+            "-c", "<</PageOffset [-${crop.left} ${crop.top}]>> setpagedevice",
+            "-f", sourcePdf.toString(),
         ), 60)
     }
 
@@ -96,6 +101,8 @@ class PdfTransformer(
 
     private fun runProcess(command: String, timeoutSec: Int) = runProcess(command.split(argumentsRegex), timeoutSec)
     private fun runProcess(command: List<String>, timeoutSec: Int) {
+//        println(command.joinToString(" "))
+
         val pb = ProcessBuilder(command)
             .directory(workDir.toFile())
             .inheritIO()
@@ -103,5 +110,10 @@ class PdfTransformer(
         val process = pb.start()
         if (!process.waitFor(timeoutSec.toLong(), TimeUnit.SECONDS)) error("too long")
         require(process.exitValue() == 0)
+    }
+
+    companion object {
+        private const val gs = "C:/Program Files/gs/gs9.54.0/bin/gswin64c.exe"
+        const val GS_RETRY_COUNT = 5
     }
 }
