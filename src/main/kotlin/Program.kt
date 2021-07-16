@@ -87,16 +87,15 @@ class PdfTransformer(
         println("Merging...")
         val pages = (1..lastPage).toList().joinToString(" ") { "$it.pdf" }
         runProcess(
-            listOf(gs, "-dBATCH", "-dNOPAUSE", "-q", "-sDEVICE=pdfwrite", "-sOutputFile=$destPdf", pages),600)
+            listOf(gs, "-q", "-o", "$destPdf", "-sDEVICE=pdfwrite", "-dBATCH", "-dNOPAUSE", pages),600)
     }
 
     private fun extractPage(page: Int, pagePdf: Path, crop: Rect?) {
         if (crop == null) {
             val extractCommand = listOf(
-                gs, "-q", "-sDEVICE=pdfwrite",
+                gs, "-q", "-o", pagePdf.toString(), "-sDEVICE=pdfwrite",
                 "-dNOPAUSE", "-dBATCH", "-dSAFER",
                 "-dFirstPage=$page", "-dLastPage=$page",
-                "-o", pagePdf.toString(),
                 "-f", sourcePdf.toString()
             )
             runProcess(extractCommand, 60 )
@@ -107,12 +106,11 @@ class PdfTransformer(
         val cropHeight = crop.bottom - crop.top
 
         runProcess(listOf(
-            gs, "-q", "-sDEVICE=pdfwrite",
+            gs, "-q", "-o", pagePdf.toString(), "-sDEVICE=pdfwrite",
             "-dNOPAUSE", "-dBATCH", "-dSAFER",
             "-dFirstPage=$page", "-dLastPage=$page",
             "-dDEVICEWIDTHPOINTS=$cropWidth", "-dDEVICEHEIGHTPOINTS=$cropHeight", "-dFIXEDMEDIA",
             "-c", "<</PageOffset [-${crop.left} ${crop.top}]>> setpagedevice",
-            "-o", pagePdf.toString(),
             "-f", sourcePdf.toString(),
         ), 60)
     }
