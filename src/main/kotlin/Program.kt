@@ -63,7 +63,7 @@ class PdfTransformer(
     }
 
     private fun extractPageWithProgress(page: Int, progress: AtomicInteger) {
-        val pagePdf = workDir.resolve("$page.pdf.orig")
+        val pagePdf = workDir.resolve("$page.pdf")
 
         val cropbox = if (noTransformPages.contains(page)) null else crop
         extractPage(page, pagePdf, cropbox)
