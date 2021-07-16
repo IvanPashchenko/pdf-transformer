@@ -29,7 +29,7 @@ fun main(args: Array<String>) {
         Path.of(output),
         946,
         crop,
-        setOf(0, 1, 5),
+        setOf(1, 2, 6),
     )
 
     transformer.makeSplitPages()
