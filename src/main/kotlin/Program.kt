@@ -10,8 +10,8 @@ fun main(args: Array<String>) {
     val crop = Rect(120, 63, 450, 795)
 
     val transformer = PdfTransformer(
-        Path.of("C:/Users/root/Downloads/orig.pdf"),
-        Path.of("C:/Users/root/Downloads/merged.pdf"),
+        Path.of(args[0]),
+        Path.of(args[1]),
         946,
         crop,
         setOf(0, 1, 5)
@@ -70,13 +70,20 @@ class PdfTransformer(
 
     fun mergePages() {
         println("Merging...")
-        val pages = (1..lastPage).toList().joinToString(" ") { workDir.resolve("$it.pdf").absolutePathString() }
-        runProcess("$gs -dBATCH -dNOPAUSE -q -sDEVICE=pdfwrite -sOutputFile=$destPdf $pages", 600)
+        val pages = (1..lastPage).toList().joinToString(" ") { "$it.pdf" }
+        runProcess(
+            listOf(gs, "-dBATCH", "-dNOPAUSE", "-q", "-sDEVICE=pdfwrite", "-sOutputFile=$destPdf", pages),600)
     }
 
     private fun extractPage(page: Int, pagePdf: Path, crop: Rect?) {
         if (crop == null) {
-            val extractCommand = "$gs -q -sDEVICE=pdfwrite -dNOPAUSE -dBATCH -dSAFER -dFirstPage=$page -dLastPage=$page -o $pagePdf -f $sourcePdf"
+            val extractCommand = listOf(
+                gs, "-q", "-sDEVICE=pdfwrite",
+                "-dNOPAUSE", "-dBATCH", "-dSAFER",
+                "-dFirstPage=$page", "-dLastPage=$page",
+                "-o", pagePdf.toString(),
+                "-f", sourcePdf.toString()
+            )
             runProcess(extractCommand, 60 )
             return
         }
@@ -85,21 +92,16 @@ class PdfTransformer(
         val cropHeight = crop.bottom - crop.top
 
         runProcess(listOf(
-            gs,
-            "-q",
-            "-o", pagePdf.toString(),
-            "-sDEVICE=pdfwrite",
+            gs, "-q", "-sDEVICE=pdfwrite",
             "-dNOPAUSE", "-dBATCH", "-dSAFER",
             "-dFirstPage=$page", "-dLastPage=$page",
             "-dDEVICEWIDTHPOINTS=$cropWidth", "-dDEVICEHEIGHTPOINTS=$cropHeight", "-dFIXEDMEDIA",
             "-c", "<</PageOffset [-${crop.left} ${crop.top}]>> setpagedevice",
+            "-o", pagePdf.toString(),
             "-f", sourcePdf.toString(),
         ), 60)
     }
 
-    private val argumentsRegex = Regex("\\s+")
-
-    private fun runProcess(command: String, timeoutSec: Int) = runProcess(command.split(argumentsRegex), timeoutSec)
     private fun runProcess(command: List<String>, timeoutSec: Int) {
 //        println(command.joinToString(" "))
 
@@ -113,7 +115,9 @@ class PdfTransformer(
     }
 
     companion object {
-        private const val gs = "C:/Program Files/gs/gs9.54.0/bin/gswin64c.exe"
+        private val gs =
+            if (System.getProperty("os.name").startsWith("win", true)) "C:/Program Files/gs/gs9.54.0/bin/gswin64c.exe"
+            else "gs"
         const val GS_RETRY_COUNT = 5
     }
 }
