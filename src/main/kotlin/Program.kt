@@ -85,9 +85,9 @@ class PdfTransformer(
 
     fun mergePages() {
         println("Merging...")
-        val pages = (1..lastPage).toList().joinToString(" ") { "$it.pdf" }
+        val pages = (1..lastPage).map { "$it.pdf" }
         runProcess(
-            listOf(gs, "-q", "-o", "$destPdf", "-sDEVICE=pdfwrite", "-dBATCH", "-dNOPAUSE", pages),600)
+            listOf(gs, "-q", "-o", "$destPdf", "-sDEVICE=pdfwrite", "-dBATCH", "-dNOPAUSE") + pages ,600)
     }
 
     private fun extractPage(page: Int, pagePdf: Path, crop: Rect?) {
