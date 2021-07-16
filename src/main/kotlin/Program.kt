@@ -70,7 +70,7 @@ class PdfTransformer(
 
     fun mergePages() {
         println("Merging...")
-        val pages = (1..lastPage).toList().joinToString(" ") { "$it.pdf" }
+        val pages = (1..lastPage).toList().joinToString(" ") { workDir.resolve("$it.pdf").absolutePathString() }
         runProcess("$gs -dBATCH -dNOPAUSE -q -sDEVICE=pdfwrite -sOutputFile=$destPdf $pages", 600)
     }
 
