@@ -12,11 +12,12 @@ var TRACE_ENABLED = false
 @Suppress("UNUSED_PARAMETER")
 fun main(args: Array<String>) {
     val parser = ArgParser("pdf-transformer")
-    val crop = Rect(120, 63, 450, 795)
+    val crop = Rect(120, -168, 450, 310)
 
     val input by parser.argument(ArgType.String)
     val output by parser.argument(ArgType.String)
     val trace by parser.option(ArgType.Boolean)
+    val page by parser.option(ArgType.Int)
 
     parser.parse(args)
 
@@ -32,11 +33,16 @@ fun main(args: Array<String>) {
         setOf(1, 2, 6),
     )
 
-    transformer.makeSplitPages()
-    transformer.mergePages()
+    if (page != null) {
+        transformer.extractPage(page!!, Path.of("$page.pdf"), crop)
+    }
+    else {
+        transformer.makeSplitPages()
+        transformer.mergePages()
+    }
 }
 
-class Rect(val left: Int, val top: Int, val right: Int, val bottom: Int)
+class Rect(val left: Int, val top: Int, val width: Int, val height: Int)
 
 class PdfTransformer(
     private val sourcePdf: Path,
@@ -87,31 +93,31 @@ class PdfTransformer(
         println("Merging...")
         val pages = (1..lastPage).map { "$it.pdf" }
         runProcess(
-            listOf(gs, "-q", "-o", "$destPdf", "-sDEVICE=pdfwrite", "-dBATCH", "-dNOPAUSE") + pages ,600)
+            listOf(gs, "-q", "-o", "${destPdf.toAbsolutePath()}", "-sDEVICE=pdfwrite", "-dBATCH", "-dNOPAUSE") + pages ,600)
     }
 
-    private fun extractPage(page: Int, pagePdf: Path, crop: Rect?) {
+    fun extractPage(page: Int, pagePdf: Path, crop: Rect?) {
         if (crop == null) {
             val extractCommand = listOf(
-                gs, "-q", "-o", pagePdf.toString(), "-sDEVICE=pdfwrite",
+                gs, "-q", "-o", pagePdf.absolutePathString(), "-sDEVICE=pdfwrite",
                 "-dNOPAUSE", "-dBATCH", "-dSAFER",
                 "-dFirstPage=$page", "-dLastPage=$page",
-                "-f", sourcePdf.toString()
+                "-f", sourcePdf.absolutePathString()
             )
             runProcess(extractCommand, 60 )
             return
         }
 
-        val cropWidth = crop.right - crop.left
-        val cropHeight = crop.bottom - crop.top
+        val cropWidth = crop.width - crop.left
+        val cropHeight = crop.height - crop.top
 
         runProcess(listOf(
-            gs, "-q", "-o", pagePdf.toString(), "-sDEVICE=pdfwrite",
+            gs, "-q", "-o", pagePdf.absolutePathString(), "-sDEVICE=pdfwrite",
             "-dNOPAUSE", "-dBATCH", "-dSAFER",
             "-dFirstPage=$page", "-dLastPage=$page",
             "-dDEVICEWIDTHPOINTS=$cropWidth", "-dDEVICEHEIGHTPOINTS=$cropHeight", "-dFIXEDMEDIA",
             "-c", "<</PageOffset [-${crop.left} ${crop.top}]>> setpagedevice",
-            "-f", sourcePdf.toString(),
+            "-f", sourcePdf.absolutePathString(),
         ), 60)
     }
 
